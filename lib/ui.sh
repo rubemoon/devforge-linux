@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+show_brand() {
+  local asset="$DF_ROOT/assets/pro-avatar.txt"
+  printf '\n%s' "$(color '1;35')"
+  if [[ -r $asset ]]; then cat "$asset"; fi
+  printf '%s\n' "$(color 0)"
+  printf '%s  DEVFORGE LINUX%s  %sPOWERED BY KOZENETPRO%s\n' "$(color '1;36')" "$(color 0)" "$(color '1;35')" "$(color 0)"
+  printf '%s  Full-stack workstation setup%s\n\n' "$(color 2)" "$(color 0)"
+}
+
 show_help() {
   cat <<'HELP'
 DevForge Linux 1.0.0 — Linux developer workstation setup
@@ -14,7 +23,8 @@ Usage:
   devforge --version
 
 Modules:
-  fullstack    Rails, Node.js, Python, Rust, PostgreSQL, Podman, Flutter
+  fullstack    Rails, Node.js, Python, Rust, PostgreSQL, Podman, Flutter, terminal UI
+  terminal     Branded prompt, logo, and terminal title
   essentials   Git, compilers, libraries, curl, jq, and basic tools
   asdf         Current asdf version manager with Bash/Zsh shims
   ruby         Stable Ruby via asdf (default) or rbenv
@@ -23,7 +33,7 @@ Modules:
   python       Stable Python via asdf
   rust         Stable Rust, rustup, Cargo, Clippy, and rustfmt
   dbclients    PostgreSQL and MariaDB clients
-  postgres     PostgreSQL server; does not start the service
+  postgres     PostgreSQL server and local devforge role
   mariadb      MariaDB/MySQL server; does not start the service
   podman       Podman containers
   flutter      Stable Flutter Linux SDK; Android SDK is separate
@@ -51,7 +61,7 @@ menu() {
   local opt answer i line
   local -a selected=()
   [[ -t 0 ]] || die 'The menu requires a terminal. Use devforge install ...'
-  printf '\n  DevForge Linux / Developer Bootstrap\n'
+  show_brand
   printf '  Distribution: %s\n\n' "$DF_PRETTY"
   i=1
   for opt in "${DF_MODULES[@]}"; do
@@ -81,6 +91,7 @@ menu() {
 
 doctor() {
   local cmd version
+  show_brand
   log "System: $DF_PRETTY | architecture: $(uname -m)"
   printf '%-16s | %s\n' 'Tool' 'Status / Version'
   printf '%s\n' '------------------------------------------'

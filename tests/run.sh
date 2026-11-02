@@ -17,6 +17,7 @@ assert_contains "$output" 'dry-run'
 printf 'PASS: help\n'
 output=$("$ROOT/bin/devforge" list)
 assert_contains "$output" 'fullstack'
+assert_contains "$output" 'terminal'
 assert_contains "$output" 'flutter'
 printf 'PASS: module list\n'
 
@@ -53,12 +54,44 @@ for item in fedora ubuntu arch; do
 done
 
 output=$(HOME="$scratch/home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install fullstack --dry-run --yes)
-for module in fullstack rails flutter node python rust postgres podman; do
+for module in fullstack rails flutter node python rust postgres podman terminal; do
   assert_contains "$output" "module: $module"
 done
+assert_contains "$output" 'POWERED BY KOZENETPRO'
+assert_contains "$output" '[STEP 01] fullstack'
+assert_contains "$output" '[ DONE ] terminal'
 assert_contains "$output" 'Installation complete. Restart your terminal, then run devforge doctor.'
 assert_not_exists "$scratch/home/.local"
+assert_not_exists "$scratch/home/.config"
+assert_not_exists "$scratch/home/.bashrc"
 printf 'PASS: Fedora full-stack preset dry run\n'
+
+profile_home="$scratch/profile-home"
+mkdir -p "$profile_home"
+cat > "$profile_home/.bashrc" <<'PROFILE'
+before-devforge
+# >>> devforge:terminal >>>
+old copied logo and prompt
+# <<< devforge:terminal <<<
+after-devforge
+PROFILE
+HOME="$profile_home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install terminal --yes > "$scratch/terminal.out"
+profile_contents=$(<"$profile_home/.bashrc")
+assert_contains "$profile_contents" 'before-devforge'
+assert_contains "$profile_contents" 'after-devforge'
+assert_contains "$profile_contents" 'git branch --show-current'
+assert_contains "$profile_contents" "PS1='\\[\\e[1;36m\\]DEVFORGE"
+[[ $(grep -Fc '# >>> devforge:terminal >>>' "$profile_home/.bashrc") == 1 ]]
+assert_not_exists "$profile_home/.config/devforge/pro-avatar.txt"
+printf 'PASS: live terminal theme update\n'
+
+output=$(HOME="$scratch/home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install postgres --dry-run --yes)
+assert_contains "$output" 'postgresql-setup --initdb'
+assert_contains "$output" 'systemctl enable --now postgresql'
+assert_contains "$output" 'PostgreSQL role devforge with CREATEDB privilege'
+assert_contains "$output" "$scratch/home/.config/devforge/postgres.env"
+assert_not_exists "$scratch/home/.config"
+printf 'PASS: PostgreSQL role dry run\n'
 
 output=$(HOME="$scratch/home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install ruby,node --ruby-manager rbenv --node-manager nvm --dry-run --yes)
 assert_contains "$output" 'rbenv install'

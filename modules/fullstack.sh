@@ -9,4 +9,5 @@ module_fullstack() {
   install_module postgres
   install_module podman
   install_module flutter
+  install_module terminal
 }

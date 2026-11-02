@@ -1,9 +1,59 @@
 #!/usr/bin/env bash
 module_dbclients() { pkg_install dbclients; }
 module_postgres() {
+  install_module essentials
   pkg_install postgres
-  log 'PostgreSQL installed. The database is not initialized and the service is not started.'
-  log 'On Fedora, initialize and start it manually when needed: sudo postgresql-setup --initdb && sudo systemctl enable --now postgresql.'
+  local credentials_dir="$HOME/.config/devforge"
+  local credentials_file="$credentials_dir/postgres.env"
+  local password sql_file role_query
+
+  if [[ $DF_DRY_RUN == 1 ]]; then
+    case "$DF_FAMILY" in
+      fedora) run sudo postgresql-setup --initdb ;;
+      arch) run sudo -iu postgres initdb -D /var/lib/postgres/data ;;
+    esac
+    run sudo systemctl enable --now postgresql
+    log '[DRY RUN] Create or update PostgreSQL role devforge with CREATEDB privilege.'
+    log "[DRY RUN] Store PostgreSQL credentials in $credentials_file with permissions 600."
+    return
+  fi
+
+  case "$DF_FAMILY" in
+    fedora)
+      if [[ ! -s /var/lib/pgsql/data/PG_VERSION ]]; then run sudo postgresql-setup --initdb; fi
+      ;;
+    arch)
+      if [[ ! -s /var/lib/postgres/data/PG_VERSION ]]; then run sudo -iu postgres initdb -D /var/lib/postgres/data; fi
+      ;;
+  esac
+  run sudo systemctl enable --now postgresql
+
+  run mkdir -p "$credentials_dir"
+  run chmod 700 "$credentials_dir"
+  if [[ -e $credentials_file || -L $credentials_file ]]; then
+    [[ -f $credentials_file && ! -L $credentials_file ]] || die "Invalid credential file: $credentials_file"
+    password=$(sed -n 's/^PGPASSWORD=//p' "$credentials_file")
+    [[ $password =~ ^[0-9a-f]{64}$ ]] || die "Invalid password in $credentials_file"
+    run chmod 600 "$credentials_file"
+  else
+    require_cmd openssl
+    password=$(openssl rand -hex 32) || die 'Could not generate a PostgreSQL password.'
+  fi
+
+  sql_file=$(mktemp)
+  role_query="SELECT format(CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'devforge') THEN 'ALTER ROLE devforge WITH LOGIN CREATEDB PASSWORD %L' ELSE 'CREATE ROLE devforge WITH LOGIN CREATEDB PASSWORD %L' END, '$password')"
+  printf '%s\n\\gexec\n' "$role_query" > "$sql_file"
+  if ! sudo -u postgres psql --set=ON_ERROR_STOP=1 < "$sql_file" >/dev/null; then
+    rm -f -- "$sql_file"
+    die 'Could not create or update the PostgreSQL devforge role.'
+  fi
+  rm -f -- "$sql_file"
+
+  if [[ ! -e $credentials_file ]]; then
+    (umask 077; printf 'PGHOST=127.0.0.1\nPGPORT=5432\nPGUSER=devforge\nPGPASSWORD=%s\n' "$password" > "$credentials_file")
+    run chmod 600 "$credentials_file"
+  fi
+  log "PostgreSQL is running. The devforge role can create project databases; credentials are stored in $credentials_file."
 }
 module_mariadb() {
   pkg_install mariadb

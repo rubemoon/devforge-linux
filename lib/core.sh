@@ -49,11 +49,47 @@ require_unprivileged() {
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"; }
 
 add_profile_block() {
-  local label="$1" content="$2" file start end
+  local label="$1" content="$2" file start end body_file temp
   start="# >>> devforge:${label} >>>"
   end="# <<< devforge:${label} <<<"
   for file in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    if [[ -f "$file" ]] && grep -Fqx "$start" "$file"; then continue; fi
+    if [[ -L $file ]]; then
+      file="$(readlink -f -- "$file")" || die "Could not resolve shell config symlink: $file"
+    fi
+    if [[ -f "$file" ]] && grep -Fqx "$start" "$file"; then
+      if [[ $DF_DRY_RUN == 1 ]]; then
+        log "[DRY RUN] Update $label configuration in $file"
+        continue
+      fi
+      body_file=$(mktemp "${file}.devforge.body.XXXXXX") || die "Could not create temporary file for $file"
+      printf '%b\n' "$content" > "$body_file"
+      temp=$(mktemp "${file}.devforge.XXXXXX") || die "Could not create temporary file for $file"
+      if ! awk -v start="$start" -v end="$end" -v body_file="$body_file" '
+        $0 == start {
+          if (!updated) {
+            print
+            while ((getline body_line < body_file) > 0) print body_line
+            close(body_file)
+            updated=1
+            block=1
+          }
+          else { block=2 }
+          next
+        }
+        $0 == end && block { if (block == 1) print; block=0; next }
+        !block { print }
+        END { if (block || !updated) exit 1 }
+      ' "$file" > "$temp"; then
+        rm -f -- "$body_file"
+        rm -f -- "$temp"
+        die "Could not update $label configuration in $file"
+      fi
+      rm -f -- "$body_file"
+      chmod --reference="$file" "$temp"
+      mv -f -- "$temp" "$file"
+      log "$label configuration updated in $file"
+      continue
+    fi
     if [[ $DF_DRY_RUN == 1 ]]; then
       log "[DRY RUN] Add $label configuration to $file"
     else

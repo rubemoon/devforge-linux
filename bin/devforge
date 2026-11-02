@@ -16,31 +16,36 @@ source "$DF_ROOT/lib/versions.sh"
 source "$DF_ROOT/lib/ui.sh"
 for f in "$DF_ROOT"/modules/*.sh; do source "$f"; done
 
-DF_MODULES=(fullstack essentials asdf ruby rails node python rust dbclients postgres mariadb podman flutter)
+DF_MODULES=(fullstack terminal essentials asdf ruby rails node python rust dbclients postgres mariadb podman flutter)
 declare -A DF_DESCRIPTIONS=(
-  [fullstack]='Full-stack workstation: Rails, Flutter, runtimes, database, containers'
-  [essentials]='Git e dependências essenciais'
+  [fullstack]='Full-stack workstation: Rails, Flutter, runtimes, database, terminal branding'
+  [terminal]='Pro ASCII logo and branded shell prompt'
+  [essentials]='Git and essential build dependencies'
   [asdf]='Version manager asdf'
   [ruby]='Ruby stable (asdf/rbenv)'
-  [rails]='Ruby on Rails e Bundler'
+  [rails]='Ruby on Rails and Bundler'
   [node]='Node.js LTS (asdf/nvm)'
-  [python]='Python stable e venv'
-  [rust]='Rust stable e Cargo'
+  [python]='Stable Python and virtual environments'
+  [rust]='Stable Rust and Cargo'
   [dbclients]='PostgreSQL + MariaDB clients'
   [postgres]='PostgreSQL server (not started automatically)'
   [mariadb]='MariaDB server (not started automatically)'
-  [podman]='Containers rootless'
+  [podman]='Rootless Podman containers'
   [flutter]='Flutter SDK Linux stable'
 )
 declare -A DF_DONE=()
+DF_PROGRESS_STEP=0
 
 install_module() {
   local module="$1"
   [[ -n ${DF_DESCRIPTIONS[$module]+x} ]] || die "Unknown module: $module"
   [[ -z ${DF_DONE[$module]+x} ]] || return 0
+  ((DF_PROGRESS_STEP+=1))
+  printf '%s[STEP %02d]%s %s\n' "$(color '1;35')" "$DF_PROGRESS_STEP" "$(color 0)" "$module"
   log "--- Installing module: $module ---"
   "module_$module"
   DF_DONE[$module]=1
+  printf '%s[ DONE ]%s %s\n' "$(color '1;32')" "$(color 0)" "$module"
 }
 
 perform_install() {
@@ -48,6 +53,7 @@ perform_install() {
   local -a modules=("$@")
   (( ${#modules[@]} > 0 )) || die 'Select at least one module.'
   for module in "${modules[@]}"; do [[ -n ${DF_DESCRIPTIONS[$module]+x} ]] || die "Unknown module: $module"; done
+  show_brand
   log "Linux: $DF_PRETTY | Ruby manager: $DF_RUBY_MANAGER | Node manager: $DF_NODE_MANAGER"
   log "Plan: ${modules[*]}"
   if [[ $DF_DRY_RUN == 1 ]]; then log 'DRY RUN: no system changes will be made.'
