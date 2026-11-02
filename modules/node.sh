@@ -12,7 +12,7 @@ module_node() {
         local bin version
         bin=$(asdf_bin)
         run "$bin" cmd nodejs update-nodebuild
-        version=${DF_NODE_VERSION:-$("$bin" cmd nodejs resolve lts --latest-available)}
+        version=${DF_NODE_VERSION:-$("$bin" cmd nodejs resolve lts)}
         valid_version "$version" || die "Invalid Node.js LTS version: $version"
         asdf_install_latest nodejs "$version"
       fi
