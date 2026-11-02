@@ -86,12 +86,40 @@ assert_not_exists "$profile_home/.config/devforge/pro-avatar.txt"
 printf 'PASS: live terminal theme update\n'
 
 output=$(HOME="$scratch/home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install postgres --dry-run --yes)
-assert_contains "$output" 'postgresql-setup --initdb'
+assert_contains "$output" 'Check PostgreSQL cluster state'
+assert_contains "$output" 'sudo postgresql-setup --initdb'
 assert_contains "$output" 'systemctl enable --now postgresql'
 assert_contains "$output" 'PostgreSQL role devforge with CREATEDB privilege'
 assert_contains "$output" "$scratch/home/.config/devforge/postgres.env"
 assert_not_exists "$scratch/home/.config"
 printf 'PASS: PostgreSQL role dry run\n'
+
+fake_bin="$scratch/fake-bin"
+partial_data="$scratch/partial-postgres-data"
+initialized_data="$scratch/initialized-postgres-data"
+mkdir -p "$fake_bin" "$partial_data"
+mkdir -p "$initialized_data"
+printf 'partial data\n' > "$partial_data/postmaster.opts"
+printf '18\n' > "$initialized_data/PG_VERSION"
+cat > "$fake_bin/sudo" <<'SUDO'
+#!/usr/bin/env bash
+case "$1" in
+  test) shift; test "$@" ;;
+  find) shift; exec find "$@" ;;
+  *) exit 0 ;;
+esac
+SUDO
+chmod +x "$fake_bin/sudo"
+source "$ROOT/modules/databases.sh"
+cluster_state=$(PATH="$fake_bin:$PATH" postgres_cluster_state "$initialized_data")
+[[ $cluster_state == initialized ]] || { echo "FAIL: initialized PostgreSQL cluster reported as $cluster_state" >&2; exit 1; }
+printf 'PASS: recognizes initialized PostgreSQL cluster\n'
+if PATH="$fake_bin:$PATH" HOME="$scratch/home" DF_POSTGRES_DATA_DIR="$partial_data" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install postgres --yes > "$scratch/postgres-partial.out" 2>&1; then
+  echo 'FAIL: incomplete PostgreSQL cluster accepted' >&2; exit 1
+fi
+assert_contains "$(<"$scratch/postgres-partial.out")" 'not empty but has no PG_VERSION'
+[[ -f $partial_data/postmaster.opts ]]
+printf 'PASS: protects incomplete PostgreSQL data directory\n'
 
 output=$(HOME="$scratch/home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROOT/bin/devforge" install ruby,node --ruby-manager rbenv --node-manager nvm --dry-run --yes)
 assert_contains "$output" 'rbenv install'

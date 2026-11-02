@@ -1,17 +1,33 @@
 #!/usr/bin/env bash
 module_dbclients() { pkg_install dbclients; }
+
+postgres_cluster_state() {
+  local data_dir="$1"
+  if sudo test -s "$data_dir/PG_VERSION"; then
+    printf 'initialized'
+  elif sudo test -d "$data_dir" && sudo find "$data_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+    printf 'incomplete'
+  else
+    printf 'empty'
+  fi
+}
+
 module_postgres() {
   install_module essentials
   pkg_install postgres
   local credentials_dir="$HOME/.config/devforge"
   local credentials_file="$credentials_dir/postgres.env"
-  local password sql_file role_query
+  local password sql_file role_query data_dir cluster_state
 
   if [[ $DF_DRY_RUN == 1 ]]; then
     case "$DF_FAMILY" in
-      fedora) run sudo postgresql-setup --initdb ;;
-      arch) run sudo -iu postgres initdb -D /var/lib/postgres/data ;;
+      fedora) data_dir=${DF_POSTGRES_DATA_DIR:-/var/lib/pgsql/data} ;;
+      arch) data_dir=${DF_POSTGRES_DATA_DIR:-/var/lib/postgres/data} ;;
+      *) data_dir='distribution default' ;;
     esac
+    log "[DRY RUN] Check PostgreSQL cluster state at $data_dir before initialization."
+    [[ $DF_FAMILY != fedora ]] || log '[DRY RUN] If the Fedora data directory is empty: sudo postgresql-setup --initdb.'
+    [[ $DF_FAMILY != arch ]] || log '[DRY RUN] If the Arch data directory is empty: sudo -iu postgres initdb -D /var/lib/postgres/data.'
     run sudo systemctl enable --now postgresql
     log '[DRY RUN] Create or update PostgreSQL role devforge with CREATEDB privilege.'
     log "[DRY RUN] Store PostgreSQL credentials in $credentials_file with permissions 600."
@@ -20,10 +36,22 @@ module_postgres() {
 
   case "$DF_FAMILY" in
     fedora)
-      if [[ ! -s /var/lib/pgsql/data/PG_VERSION ]]; then run sudo postgresql-setup --initdb; fi
+      data_dir=${DF_POSTGRES_DATA_DIR:-/var/lib/pgsql/data}
+      cluster_state=$(postgres_cluster_state "$data_dir")
+      case "$cluster_state" in
+        initialized) log "Existing PostgreSQL cluster detected at $data_dir." ;;
+        empty) run sudo postgresql-setup --initdb ;;
+        incomplete) die "PostgreSQL data directory $data_dir is not empty but has no PG_VERSION. Initialization stopped to protect existing files; inspect or back up this directory before retrying." ;;
+      esac
       ;;
     arch)
-      if [[ ! -s /var/lib/postgres/data/PG_VERSION ]]; then run sudo -iu postgres initdb -D /var/lib/postgres/data; fi
+      data_dir=${DF_POSTGRES_DATA_DIR:-/var/lib/postgres/data}
+      cluster_state=$(postgres_cluster_state "$data_dir")
+      case "$cluster_state" in
+        initialized) log "Existing PostgreSQL cluster detected at $data_dir." ;;
+        empty) run sudo -iu postgres initdb -D "$data_dir" ;;
+        incomplete) die "PostgreSQL data directory $data_dir is not empty but has no PG_VERSION. Initialization stopped to protect existing files; inspect or back up this directory before retrying." ;;
+      esac
       ;;
   esac
   run sudo systemctl enable --now postgresql
