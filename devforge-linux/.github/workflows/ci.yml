@@ -1,0 +1,21 @@
+name: Bash CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Validate syntax
+        run: find bin lib modules tests -type f \( -name '*.sh' -o -name 'devforge' \) -exec bash -n {} \;
+      - name: Run smoke tests
+        run: bash tests/run.sh
+      - name: ShellCheck (advisory)
+        continue-on-error: true
+        run: shellcheck -x bin/devforge lib/*.sh modules/*.sh install.sh tests/run.sh

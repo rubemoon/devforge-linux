@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+[[ ${BASH_VERSINFO[0]} -ge 4 ]] || { echo 'DevForge requires Bash 4+' >&2; exit 1; }
+DF_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=../lib/core.sh
+source "$DF_ROOT/lib/core.sh"
+# shellcheck source=../lib/distro.sh
+source "$DF_ROOT/lib/distro.sh"
+# shellcheck source=../lib/packages.sh
+source "$DF_ROOT/lib/packages.sh"
+# shellcheck source=../lib/versions.sh
+source "$DF_ROOT/lib/versions.sh"
+# shellcheck source=../lib/ui.sh
+source "$DF_ROOT/lib/ui.sh"
+for f in "$DF_ROOT"/modules/*.sh; do source "$f"; done
+
+DF_MODULES=(fullstack essentials asdf ruby rails node python rust dbclients postgres mariadb podman flutter)
+declare -A DF_DESCRIPTIONS=(
+  [fullstack]='Full-stack workstation: Rails, Flutter, runtimes, database, containers'
+  [essentials]='Git e dependências essenciais'
+  [asdf]='Version manager asdf'
+  [ruby]='Ruby stable (asdf/rbenv)'
+  [rails]='Ruby on Rails e Bundler'
+  [node]='Node.js LTS (asdf/nvm)'
+  [python]='Python stable e venv'
+  [rust]='Rust stable e Cargo'
+  [dbclients]='PostgreSQL + MariaDB clients'
+  [postgres]='PostgreSQL server (not started automatically)'
+  [mariadb]='MariaDB server (not started automatically)'
+  [podman]='Containers rootless'
+  [flutter]='Flutter SDK Linux stable'
+)
+declare -A DF_DONE=()
+
+install_module() {
+  local module="$1"
+  [[ -n ${DF_DESCRIPTIONS[$module]+x} ]] || die "Unknown module: $module"
+  [[ -z ${DF_DONE[$module]+x} ]] || return 0
+  log "--- Installing module: $module ---"
+  "module_$module"
+  DF_DONE[$module]=1
+}
+
+perform_install() {
+  local module
+  local -a modules=("$@")
+  (( ${#modules[@]} > 0 )) || die 'Select at least one module.'
+  for module in "${modules[@]}"; do [[ -n ${DF_DESCRIPTIONS[$module]+x} ]] || die "Unknown module: $module"; done
+  log "Linux: $DF_PRETTY | Ruby manager: $DF_RUBY_MANAGER | Node manager: $DF_NODE_MANAGER"
+  log "Plan: ${modules[*]}"
+  if [[ $DF_DRY_RUN == 1 ]]; then log 'DRY RUN: no system changes will be made.'
+  elif ! confirm 'Run installation plan?'; then log 'Cancelled.'; return; fi
+  for module in "${modules[@]}"; do install_module "$module"; done
+  log 'Installation complete. Run devforge doctor and restart your terminal.'
+}
+
+require_unprivileged
+command=${1:-menu}
+if [[ $command == -h || $command == --help || $command == help ]]; then show_help; exit 0; fi
+if [[ $command == --version || $command == version ]]; then printf 'devforge %s\n' "$DF_VERSION"; exit 0; fi
+shift || true
+args=()
+while (( $# )); do
+  case "$1" in
+    --dry-run) DF_DRY_RUN=1; shift ;;
+    --yes|-y) DF_YES=1; shift ;;
+    --ruby-manager|--node-manager|--ruby-version|--node-version|--python-version)
+      flag=$1; shift
+      (( $# > 0 )) || die "Missing value for $flag"
+      case "$flag" in
+        --ruby-manager) DF_RUBY_MANAGER=$1 ;;
+        --node-manager) DF_NODE_MANAGER=$1 ;;
+        --ruby-version) DF_RUBY_VERSION=$1 ;;
+        --node-version) DF_NODE_VERSION=$1 ;;
+        --python-version) DF_PYTHON_VERSION=$1 ;;
+      esac
+      shift ;;
+    --help|-h) show_help; exit 0 ;;
+    --*) die "Unknown option: $1" ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+[[ $DF_RUBY_MANAGER == asdf || $DF_RUBY_MANAGER == rbenv ]] || die 'Ruby manager must be asdf or rbenv.'
+[[ $DF_NODE_MANAGER == asdf || $DF_NODE_MANAGER == nvm ]] || die 'Node manager must be asdf or nvm.'
+for version in "${DF_RUBY_VERSION:-}" "${DF_NODE_VERSION:-}" "${DF_PYTHON_VERSION:-}"; do
+  [[ -z $version ]] || valid_version "$version" || die "Invalid version: $version"
+done
+if [[ $command == install || $command == menu || $command == doctor ]]; then detect_distro; fi
+init_log
+case "$command" in
+  list) show_list ;;
+  doctor) doctor ;;
+  menu) menu ;;
+  install)
+    requested=()
+    for arg in "${args[@]}"; do
+      IFS=',' read -r -a parts <<< "$arg"
+      requested+=("${parts[@]}")
+    done
+    perform_install "${requested[@]}" ;;
+  *) die "Unknown command: $command (use --help)" ;;
+esac
