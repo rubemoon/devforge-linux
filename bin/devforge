@@ -53,7 +53,7 @@ perform_install() {
   if [[ $DF_DRY_RUN == 1 ]]; then log 'DRY RUN: no system changes will be made.'
   elif ! confirm 'Run installation plan?'; then log 'Cancelled.'; return; fi
   for module in "${modules[@]}"; do install_module "$module"; done
-  log 'Installation complete. Run devforge doctor and restart your terminal.'
+  log 'Installation complete. Restart your terminal, then run devforge doctor.'
 }
 
 require_unprivileged

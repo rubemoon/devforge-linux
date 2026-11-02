@@ -56,6 +56,7 @@ output=$(HOME="$scratch/home" DF_OS_RELEASE_FILE="$scratch/fedora-release" "$ROO
 for module in fullstack rails flutter node python rust postgres podman; do
   assert_contains "$output" "module: $module"
 done
+assert_contains "$output" 'Installation complete. Restart your terminal, then run devforge doctor.'
 assert_not_exists "$scratch/home/.local"
 printf 'PASS: Fedora full-stack preset dry run\n'
 
