@@ -23,6 +23,11 @@ printf 'PASS: module list\n'
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/home"
+ln -s "$ROOT/bin/devforge" "$scratch/devforge"
+output=$("$scratch/devforge" --version)
+assert_contains "$output" '1.0.0'
+printf 'PASS: symlink launcher\n'
+
 cat > "$scratch/fedora-release" <<'REL'
 ID=fedora
 PRETTY_NAME="Fedora Linux 44"

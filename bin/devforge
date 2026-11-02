@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 [[ ${BASH_VERSINFO[0]} -ge 4 ]] || { echo 'DevForge requires Bash 4+' >&2; exit 1; }
-DF_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+DF_SCRIPT="$(readlink -f -- "${BASH_SOURCE[0]}")"
+DF_ROOT="$(cd -- "$(dirname -- "$DF_SCRIPT")/.." && pwd -P)"
 # shellcheck source=../lib/core.sh
 source "$DF_ROOT/lib/core.sh"
 # shellcheck source=../lib/distro.sh
